@@ -8,4 +8,6 @@ Ansible Roles: geerlingguy.firewall & thefinn93.letsencrypt
 ansible-galaxy install geerlingguy.firewall
 </pre>
 
+<pre>
 ansible-galaxy install thefinn93.letsencrypt
+</pre>
