@@ -1,0 +1,948 @@
+---
+
+#########################
+# Builder: Chris Reeves #
+# Date: 4th Feb 2019.   #
+#########################
+
+# Set Hostname
+
+  - hosts: test
+
+# Set Configuration Files
+
+    vars_files:
+    - global-vars/config.yml
+
+# Elevate Priv
+    
+    remote_user: root
+    become: yes
+    become_method: sudo
+
+# Task Statement
+
+    tasks:
+
+# Download Role Dependancies
+
+    # - name: Download thefinn93.letsencrypt
+    #   local_action: ansible-galaxy install thefinn93.letsencrypt
+
+    # - name: Download geerlingguy.firewall
+    #   local_action: ansible-galaxy install geerlingguy.firewall
+
+# Aptitude Update && Upgrade
+
+    - name: Update and Upgrade Aptitude Packages
+      apt:
+        update_cache: yes
+        upgrade: yes
+        cache_valid_time: 86400 #One day
+
+# Set HostName
+
+    - name: Change Hostname To {{ hostname }}.{{ domain }}
+      hostname:
+        name: "{{ hostname }}.{{ domain }}"
+
+# Install Packages
+
+    - name: Install Apache2
+      apt: name=apache2 state=present
+
+    - name: Install PHP
+      apt: name=php state=present
+
+    - name: Install Postfix
+      apt: name=postfix state=present
+
+    - name: Install Dovecot
+      apt: name=dovecot-core state=present
+
+    - name: Install mySQL Server
+      apt: name=mysql-server state=present
+
+    - name: Install SpamAssassin
+      apt: name=spamassassin state=present
+
+    - name: Install Postgrey
+      apt: name=postgrey state=present
+
+    - name: Install Letsencrypt
+      apt: name=letsencrypt state=latest
+
+    - name: Install iptables-persistent
+      apt: name=iptables-persistent state=latest      
+
+    - name: Install Additional Dependencies
+      apt:
+        pkg:
+          - postfix-mysql #Postfix
+          - dovecot-imapd #Dovecot
+          - dovecot-lmtpd #Dovecot
+          - dovecot-mysql #Dovecot
+          - python-pymysql 
+          - mysql-client #MySQL
+          - mysql-common #MySQL
+          - spamc #SpamAssassin
+          - php-pear #Roundcube
+          - php-gd #Roundcube
+          - php-mysql #Roundcube
+          - php-curl #Roundcube
+          - php-zip #Roundcube
+          - php-ldap #Roundcube
+          - php-mbstring #Roundcube
+          - php-imagick #Roundcube
+          - php7.2-intl #Roundcube
+          - php-xml #Roundcube
+          - dovecot-sieve #Sieve
+          - dovecot-managesieved #Sieve
+          - python-openssl #Letsencrypt
+          - php-imap #PostfixAdmin
+          - php-mbstring #PostfixAdmin
+          - php7.2-imap #PostfixAdmin
+          - php7.2-mbstring #PostfixAdmin
+          - unzip #System
+          - wget #System
+        state: present
+
+# MySQL 
+
+    - name: Ensure mysql is running and starts on boot
+      service: name=mysql state=started enabled=true
+
+    - name: Stop MySQL
+      service: name=mysql state=stopped
+
+    - name: set environment variables
+      shell: systemctl set-environment MYSQLD_OPTS="--skip-grant-tables"
+
+    - name: Start MySQL
+      service: name=mysql state=started
+
+    - name: Change root password
+      command:  mysql -u root --execute="ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '"{{ mysql_root_password }}"';"
+
+    - name: Create ~/.my.cnf
+      file:
+        path: ~/.my.cnf
+        state: touch
+
+    - name: Insert into ~/.my.cnf
+      blockinfile:
+        path: ~/.my.cnf
+        block: |
+          [client]
+          user={{ mysql_user }}
+          password={{ mysql_root_password }}
+
+    - name: SQL Flush Privileges
+      command:  mysql -u root --execute="FLUSH PRIVILEGES"
+
+    - name: Stop MySQL
+      service: name=mysql state=stopped
+
+    - name: Unset environment variables
+      shell: systemctl unset-environment MYSQLD_OPTS
+
+    - name: Start MySQL
+      service: name=mysql state=started
+
+    - name: Ensure anonymous users are not in the database
+      mysql_user: name='' host={{ item }} state=absent
+      with_items:
+        - localhost
+        - "{{ inventory_hostname }}"
+
+    - name: Remove test database
+      mysql_db: name=test state=absent
+
+    - name: Create a new database
+      mysql_db:
+        name: "{{ mail_db_dbname }}"
+        state: present
+
+    - name: Create DB user and pass and assign rights
+      command: mysql -u root --execute="GRANT SELECT ON {{ mail_db_dbname }}.* TO '"{{ servermailuser }}"'@'127.0.0.1' IDENTIFIED BY '"{{ servermaildbpass }}"';"
+
+    - name: Create virtual domains table
+      command: mysql -u root --execute="CREATE TABLE `"{{ mail_db_dbname }}"`.`virtual_domains` ( `id`  INT NOT NULL AUTO_INCREMENT, `name` VARCHAR(50) NOT NULL, PRIMARY KEY (`id`) ) ENGINE=InnoDB DEFAULT CHARSET=utf8;"
+
+    - name: Create virtual users table
+      command: mysql -u root --execute="CREATE TABLE `"{{ mail_db_dbname }}"`.`virtual_users` ( `id` INT NOT NULL AUTO_INCREMENT, `domain_id` INT NOT NULL, `password` VARCHAR(106) NOT NULL, `email` VARCHAR(120) NOT NULL, PRIMARY KEY (`id`), UNIQUE KEY `email` (`email`), FOREIGN KEY (domain_id) REFERENCES virtual_domains(id) ON DELETE CASCADE ) ENGINE=InnoDB DEFAULT CHARSET=utf8;"
+
+    - name: Create virtual aliases table
+      command: mysql -u root --execute="CREATE TABLE `"{{ mail_db_dbname }}"`.`virtual_aliases` ( `id` INT NOT NULL AUTO_INCREMENT, `domain_id` INT NOT NULL, `source` varchar(100) NOT NULL, `destination` varchar(100) NOT NULL, PRIMARY KEY (`id`), FOREIGN KEY (domain_id) REFERENCES virtual_domains(id) ON DELETE CASCADE ) ENGINE=InnoDB DEFAULT CHARSET=utf8;"
+
+    - name: Add Domain to Virtual Domains Table
+      command: mysql -u root --execute="INSERT INTO `"{{ mail_db_dbname }}"`.`virtual_domains` (`id` ,`name`) VALUES ('1', '"{{ domain }}"');"
+
+    - name: Add Email to Virtual Users Table
+      command: mysql -u root --execute="INSERT INTO `"{{ mail_db_dbname }}"`.`virtual_users` (`id`, `domain_id`, `password` , `email`) VALUES ('1', '1', ENCRYPT('"{{ emailpass }}"', CONCAT('$6$', SUBSTRING(SHA(RAND()), -16))), '"{{ firstname }}'@'{{ domain }}"');"
+
+    - name: Add Aliases to Virtual Aliases Table
+      command: mysql -u root --execute="INSERT INTO `"{{ mail_db_dbname }}"`.`virtual_aliases` (`id`, `domain_id`, `source`, `destination`) VALUES ('1', '1', '"{{ aliases }}'@'{{ domain }}"', '"{{ firstname }}'@'{{ domain }}"');"
+
+    - name: Delete existing dist folder
+      file:
+        path: /etc/postfix/main.cf
+        state: absent
+
+    - name: Add HostName to Apache2
+      lineinfile:
+        path: /etc/apache2/apache2.conf
+        line: 'ServerName localhost'
+        insertbefore: BOF
+
+# Apache2 Configuration
+
+    - name: Ensure Apache is running and starts on boot
+      service: name=apache2 state=started enabled=true
+
+    - name: Enable Apache2 SSL
+      shell: a2enmod ssl
+
+    - name: Disable Default Site
+      shell: a2dissite 000-default.conf
+
+    - name: Delete http default vhost
+      file:
+        path: /etc/apache2/sites-available/000-default.conf
+        state: absent
+
+    - name: Delete https default vhost
+      file:
+        path: /etc/apache2/sites-available/default-ssl.conf
+        state: absent
+
+    - name: Enable Apache rewrite
+      shell: a2enmod rewrite
+
+# PHP Configuration
+
+    - name: Enable Postfix Submission
+      replace:
+       path: /etc/php/7.2/apache2/php.ini
+       regexp: ';date.timezone ='
+       replace: 'date.timezone = {{ region }}'
+       backup: yes
+
+# Postfix Configuration
+
+    - name: Ensure Postfix is running and starts on boot
+      service: name=postfix state=started enabled=true
+
+    - name: Apply Postfix Settings
+      copy:
+        src: etc/postfix/main.cf
+        dest: /etc/postfix/main.cf
+        owner: root
+        group: root
+        mode: 0777
+        backup: yes
+
+    - name: Change Postfix Hostname
+      shell: postconf -e 'myhostname = {{ mail_hostname }}.{{ domain }}'
+
+    - name: Change Postfix smtpd_banner
+      replace:
+        path: /etc/postfix/main.cf
+        regexp: smtpd_banner.*
+        replace: 'smtpd_banner = $myhostname ESMTP $mail_name'
+
+    - name: Configure Postfix SSL Certificate
+      replace:
+       path: /etc/postfix/main.cf
+       regexp: 'smtpd_tls_cert_file=/etc/ssl/certs/dovecot.pem'
+       replace: 'smtpd_tls_cert_file=/etc/letsencrypt/live/{{ mail_dns }}.{{ domain }}/cert.pem'
+       backup: yes
+
+    - name: Configure Postfix SSL Key
+      replace:
+       path: /etc/postfix/main.cf
+       regexp: 'smtpd_tls_key_file=/etc/ssl/private/dovecot.pem'
+       replace: 'smtpd_tls_key_file=/etc/letsencrypt/live/{{ mail_dns }}.{{ domain }}/privkey.pem'
+       backup: yes
+
+    - name: Enable 128M Postfix Messaging # Calculated in bytes
+      blockinfile:
+        path: /etc/postfix/main.cf
+        insertafter: EOF
+        content: |
+          message_size_limit = 134217728
+
+    - name: Enable Postfix Submission
+      replace:
+       path: /etc/postfix/master.cf
+       regexp: '#submission inet n       -       y       -       -       smtpd'
+       replace: 'submission inet n       -       y       -       -       smtpd'
+       backup: yes
+
+    - name: Enable Postfix Submission
+      replace:
+       path: /etc/postfix/master.cf
+       regexp: '#  -o syslog_name=postfix/submission'
+       replace: '   -o syslog_name=postfix/submission'
+       backup: yes
+
+    - name: Enable Postfix Submission
+      replace:
+       path: /etc/postfix/master.cf
+       regexp: '#  -o smtpd_tls_security_level=encrypt'
+       replace: '   -o smtpd_tls_security_level=encrypt'
+       backup: yes
+
+    - name: 
+      lineinfile:
+        path: /etc/postfix/master.cf
+        line: '   -o smtpd_sasl_auth_enable=yes'
+        insertafter: '  -o smtpd_tls_security_level=encrypt'
+
+    - name: 
+      lineinfile:
+        path: /etc/postfix/master.cf
+        line: '   -o smtpd_client_restrictions=permit_sasl_authenticated,reject'
+        insertafter: '   -o syslog_name=postfix/submission'
+
+    - name: Enable SpamAssassin for Postfix Submission
+      lineinfile:
+        path: /etc/postfix/master.cf
+        line: '   -o content_filter=spamassassin'
+        insertbefore: submission*.
+
+    - name: Create /etc/postfix/mysql-virtual-mailbox-domains.cf
+      file:
+        path: /etc/postfix/mysql-virtual-mailbox-domains.cf
+        state: touch
+
+    - name: Create /etc/postfix/mysql-virtual-mailbox-maps.cf
+      file:
+        path: /etc/postfix/mysql-virtual-mailbox-maps.cf
+        state: touch
+
+    - name: Create /etc/postfix/mysql-virtual-alias-maps.cf
+      file:
+        path: /etc/postfix/mysql-virtual-alias-maps.cf
+        state: touch
+
+    - name: Insert into /etc/postfix/mysql-virtual-mailbox-domains.cf
+      blockinfile:
+        path: /etc/postfix/mysql-virtual-mailbox-domains.cf
+        block: |
+          user = {{ servermailuser }}
+          password = {{ servermaildbpass }}
+          hosts = 127.0.0.1
+          dbname = {{ mail_db_dbname }}
+          query = SELECT 1 FROM virtual_domains WHERE name='%s'
+
+    - name: Insert into /etc/postfix/mysql-virtual-mailbox-maps.cf
+      blockinfile:
+        path: /etc/postfix/mysql-virtual-mailbox-maps.cf
+        block: |
+          user = {{ servermailuser }}
+          password = {{ servermaildbpass }}
+          hosts = 127.0.0.1
+          dbname = {{ mail_db_dbname }}
+          query = SELECT 1 FROM virtual_users WHERE email='%s'
+
+    - name: Insert into /etc/postfix/mysql-virtual-alias-maps.cf
+      blockinfile:
+        path: /etc/postfix/mysql-virtual-alias-maps.cf
+        block: |
+          user = {{ servermailuser }}
+          password = {{ servermaildbpass }}
+          hosts = 127.0.0.1
+          dbname = {{ mail_db_dbname }}
+          query = SELECT destination FROM virtual_aliases WHERE source='%s'
+
+    - name: 
+      lineinfile:
+        path: /etc/postfix/main.cf
+        line: '        reject_rbl_client dsn.rfc-ignorant.org,'
+        insertafter: 'smtpd_recipient_restrictions ='
+
+    - name: 
+      lineinfile:
+        path: /etc/postfix/main.cf
+        line: '        reject_rbl_client combined.rbl.msrbl.net,'
+        insertafter: '        reject_rbl_client dsn.rfc-ignorant.org,'
+
+    - name: 
+      lineinfile:
+        path: /etc/postfix/main.cf
+        line: '        reject_rbl_client rabl.nuclearelephant.com,'
+        insertafter: '        reject_rbl_client combined.rbl.msrbl.net,'
+
+    - name: 
+      lineinfile:
+        path: /etc/postfix/main.cf
+        line: '        reject_rbl_client sbl-xbl.spamhaus.org,'
+        insertafter: '        reject_rbl_client rabl.nuclearelephant.com,'
+
+    - name: 
+      lineinfile:
+        path: /etc/postfix/main.cf
+        line: '        reject_rbl_client cbl.abuseat.org,'
+        insertafter: '        reject_rbl_client sbl-xbl.spamhaus.org,'
+
+    - name: 
+      lineinfile:
+        path: /etc/postfix/main.cf
+        line: '        reject_rbl_client bl.spamcop.net,'
+        insertafter: '        reject_rbl_client cbl.abuseat.org,'
+
+    - name: Setup Extra Postfix Restrictions
+      blockinfile:
+        path: /etc/postfix/main.cf
+        insertafter: 'smtpd_tls_auth_only*.'
+        block: |
+          # Additional Postfix Restrictions
+          smtpd_helo_required = yes
+          disable_vrfy_command = yes
+          strict_rfc821_envelopes = yes
+          invalid_hostname_reject_code = 554
+          multi_recipient_bounce_reject_code = 554
+          non_fqdn_reject_code = 554
+          relay_domains_reject_code = 554
+          unknown_address_reject_code = 554
+          unknown_client_reject_code = 554
+          unknown_hostname_reject_code = 554
+          unknown_local_recipient_reject_code = 554
+          unknown_relay_recipient_reject_code = 554
+          unknown_virtual_alias_reject_code = 554
+          unknown_virtual_mailbox_reject_code = 554
+          unverified_recipient_reject_code = 554
+          unverified_sender_reject_code = 554
+
+# Dovecot Configuration
+
+    - name: Ensure Dovecot is running and starts on boot
+      service: name=dovecot state=started enabled=true
+
+    - name: Delete existing dovecot conf file
+      file:
+        path: /etc/dovecot/dovecot.conf
+        state: absent
+
+    - name: Apply Dovecot Settings
+      copy:
+        src: etc/dovecot/dovecot.conf
+        dest: /etc/dovecot/dovecot.conf
+        owner: root
+        group: root
+        mode: 0644
+        backup: yes
+
+    - name: Delete existing dovecot conf file
+      file:
+        path: /etc/dovecot/conf.d/10-mail.conf
+        state: absent
+
+    - name: Apply mail-10 conf file
+      copy:
+        src: etc/dovecot/conf.d/10-mail.conf
+        dest: /etc/dovecot/conf.d/10-mail.conf
+        owner: root
+        group: root
+        mode: 0644
+        backup: yes
+
+# Create Mail Location Folder & Permissions
+
+    - name: Create Mail Location Folder
+      file:
+        path: /var/mail/vhosts/{{ domain }}
+        state: directory
+
+    - name: Create group "vmail"
+      group:
+        name: vmail
+        state: present
+        gid: 5000
+
+    - name: Create user "vmail"
+      user:
+        name: vmail
+        groups: vmail
+        uid: 5000
+        append: yes
+
+    - file: dest=/var/mail owner=vmail group=vmail mode=0777 recurse=yes
+
+# Dovecot Configuration
+
+    - name: Delete existing dovecot auth conf file
+      file:
+        path: /etc/dovecot/conf.d/10-auth.conf
+        state: absent
+
+    - name: Apply Dovecot 10-auth conf file
+      copy:
+        src: etc/dovecot/conf.d/10-auth.conf
+        dest: /etc/dovecot/conf.d/10-auth.conf
+        owner: root
+        group: root
+        mode: 0644
+        backup: yes
+
+    - name: Delete existing Dovecot auth SQL file
+      file:
+        path: /etc/dovecot/conf.d/auth-sql.conf.ext
+        state: absent
+
+    - name: Apply Dovecot 10-auth conf file
+      copy:
+        src: etc/dovecot/conf.d/auth-sql.conf.ext
+        dest: /etc/dovecot/conf.d/auth-sql.conf.ext
+        owner: root
+        group: root
+        mode: 0644
+        backup: yes
+
+    - name: Delete existing Dovecot SQL Conf file
+      file:
+        path: /etc/dovecot/dovecot-sql.conf.ext
+        state: absent
+
+    - name: Apply Dovecot sql conf file
+      copy:
+        src: etc/dovecot/dovecot-sql.conf.ext
+        dest: /etc/dovecot/dovecot-sql.conf.ext
+        owner: root
+        group: root
+        mode: 0644
+        backup: yes
+
+    - name: Replace by enabling driver to mysql for Dovecot
+      replace:
+       path: /etc/dovecot/dovecot-sql.conf.ext
+       regexp: '#driver ='
+       replace: 'driver = mysql'
+       backup: yes
+
+    - name: Replace by setting db parms for Dovecot
+      replace:
+       path: /etc/dovecot/dovecot-sql.conf.ext
+       regexp: '#connect ='
+       replace: 'connect = host=127.0.0.1 dbname={{ mail_db_dbname }} user={{ servermailuser }} password={{ servermaildbpass }}'
+       backup: yes
+
+    - name: Change Pass Scheme for Dovecot SQL
+      replace:
+       path: /etc/dovecot/dovecot-sql.conf.ext
+       regexp: '#default_pass_scheme = MD5'
+       replace: 'default_pass_scheme = SHA512-CRYPT'
+       backup: yes
+
+    - file: dest=/var/mail owner=vmail group=dovecot recurse=yes
+
+    - name: Apply permissions to /var/mail
+      command: chmod -R o-rwx /etc/dovecot
+
+    - name: Delete existing dovecot 10-master conf file
+      file:
+        path: /etc/dovecot/conf.d/10-master.conf 
+        state: absent
+
+    - name: Apply Dovecot 10-master conf file
+      copy:
+        src: etc/dovecot/conf.d/10-master.conf 
+        dest: /etc/dovecot/conf.d/10-master.conf
+        owner: root
+        group: root
+        mode: 0644
+        backup: yes
+
+    - name: Enable Dovecot SSL
+      replace:
+       path: /etc/dovecot/conf.d/10-ssl.conf
+       regexp: 'ssl = yes'
+       replace: 'ssl = required'
+       backup: yes
+
+    - name: Configure Dovecot SSL Certificate
+      replace:
+       path: /etc/dovecot/conf.d/10-ssl.conf
+       regexp: 'ssl_cert = </etc/dovecot/private/dovecot.pem'
+       replace: 'ssl_cert = </etc/letsencrypt/live/{{ mail_dns }}.{{ domain }}/cert.pem'
+       backup: yes
+
+    - name: Configure Dovecot SSL key
+      replace:
+       path: /etc/dovecot/conf.d/10-ssl.conf
+       regexp: 'ssl_key = </etc/dovecot/private/dovecot.key'
+       replace: 'ssl_key = </etc/letsencrypt/live/{{ mail_dns }}.{{ domain }}/privkey.pem'
+       backup: yes
+
+# Configure SpamAssassin
+
+    - name: Ensure SpamAssassin is running and starts on boot
+      service: name=spamassassin state=started enabled=true
+
+    - name: Create User "spamd"  
+      user:
+        name: spamd
+        shell: /sbin/nologin
+        append: yes
+        comment: "Spamd No Login"
+        state: present
+
+    - name: Enable SpamAssassin
+      replace:
+       path: /etc/default/spamassassin
+       regexp: 'ENABLED=0'
+       replace: 'ENABLED=1'
+       backup: yes
+
+    - name: Change SpamAssassin Options
+      replace:
+       path: /etc/default/spamassassin
+       regexp: 'OPTIONS="--create-prefs --max-children 5 --helper-home-dir"'
+       replace: 'OPTIONS="--create-prefs --max-children 5 --username spamd --helper-home-dir ${SPAMD_HOME} -s ${SPAMD_HOME}spamd.log"'
+       backup: yes
+
+    - name: Change SpamAssassin PIDFILE
+      replace:
+        path: /etc/default/spamassassin
+        regexp: 'PIDFILE="/var/run/spamd.pid"'
+        replace: 'PIDFILE="${SPAMD_HOME}spamd.pid"'
+        backup: yes
+
+    - name: Set SPAMD_HOME for SpamAssassin
+      lineinfile:
+        path: /etc/default/spamassassin
+        line: 'SPAMD_HOME="/home/spamd/"'
+        insertbefore: OPTIONS=*.
+
+    - name: Enable SpamAssassin CRON
+      replace: 
+       path: /etc/default/spamassassin
+       regexp: 'CRON=0'
+       replace: 'CRON=1'
+       backup: yes
+
+    - name: Change SpamAssassin SPAM header
+      replace:
+        path: /etc/spamassassin/local.cf
+        regexp: '# rewrite_header Subject \*\*\*\*\*SPAM\*\*\*\*\*'
+        replace: 'rewrite_header Subject **SPAM**'
+        backup: yes
+
+    - name: Change SpamAssassin trusted networks
+      replace:
+        path: /etc/spamassassin/local.cf
+        regexp: '# trusted_networks 212.17.35.'
+        replace: 'trusted_networks {{ ansible_default_ipv4.address }}'
+        backup: yes
+
+    - name: Change SpamAssassin score to 4.0
+      replace:
+        path: /etc/spamassassin/local.cf
+        regexp: '# required_score 5.0'
+        replace: 'required_score 4.0'
+        backup: yes
+
+    - name: Enable SpamAssassin Bayes
+      replace:
+        path: /etc/spamassassin/local.cf
+        regexp: '# use_bayes 1'
+        replace: 'use_bayes 1'
+        backup: yes
+
+    - name: Enable SpamAssassin Auto Learn
+      replace:
+       path: /etc/spamassassin/local.cf
+       regexp: '# bayes_auto_learn 1'
+       replace: 'bayes_auto_learn 1'
+       backup: yes
+
+    - name: Enable Pyzor for SpamAssassin
+      lineinfile:
+        path: /etc/spamassassin/local.cf
+        line: 'use_pyzor               1'
+        insertbefore: endif*.
+
+    - name: Enable Razor for SpamAssassin
+      lineinfile:
+        path: /etc/spamassassin/local.cf
+        line: 'use_razor2              1'
+        insertbefore: endif*.
+
+    - name: Enable SpamAssassin in Postfix
+      lineinfile:
+        path: /etc/postfix/master.cf
+        line: '   -o content_filter=spamassassin'
+        insertafter: smtp      inet  n       -       y       -       -       smtpd
+
+    - name: Enable SpamAssassin in Postfix EOF
+      blockinfile:
+        path: /etc/postfix/master.cf
+        insertafter: EOF
+        content: |
+          spamassassin unix -     n       n       -       -       pipe
+                  user=spamd argv=/usr/bin/spamc -f -e
+                  /usr/sbin/sendmail -oi -f ${sender} ${recipient}
+
+# Install Sieve
+
+    - name: Enable Sieve plugin support for dovecot-lmtp
+      blockinfile:
+        path: /etc/dovecot/conf.d/20-lmtp.conf
+        insertbefore: '}'
+        content: |
+            postmaster_address = postmaster@{{ domain }}
+            mail_plugins = $mail_plugins sieve
+
+    - name: Delete Existing Dovecot 90-sieve.conf File
+      file:
+        state: absent
+        path: /etc/dovecot/conf.d/90-sieve.conf
+
+    - name: Create Dovecot 90-sieve.conf File
+      file:
+        path: /etc/dovecot/conf.d/90-sieve.conf
+        state: touch
+
+    - name: Create Sieve Dovecot plugin
+      blockinfile:
+        path: /etc/dovecot/conf.d/90-sieve.conf
+        insertbefore: EOF
+        content: |
+         plugin {
+            sieve = ~/.dovecot.sieve
+            sieve_global_path = /var/lib/dovecot/sieve/default.sieve
+            sieve_dir = ~/sieve
+            sieve_global_dir = /var/lib/dovecot/sieve/
+         }
+
+# Install PostGrey
+
+    - name: Ensure PostGrey is running and starts on boot
+      service: name=postgrey state=started enabled=true
+
+    - name: 
+      lineinfile:
+        path: /etc/postfix/main.cf
+        line: '        check_policy_service inet:127.0.0.1:10023,'
+        insertafter: 'smtpd_recipient_restrictions ='
+
+# Install Roundcube
+
+    - name: Install Roundcube Dependencies
+      apt:
+        pkg:
+          - php-net-smtp
+          - php-net-idna2
+          - php-mail-mime
+        state: present
+
+    - name: Creates directory
+      file:
+        path: /var/www/vhosts/{{ webmail_dns }}.{{ domain }}
+        state: directory
+
+    - name: Download Roundcube
+      shell: wget -qO- {{ roundcube_src }} | tar xvz -C /var/www/vhosts/{{ webmail_dns }}.{{ domain }}/ --strip 1
+
+    # - file:
+    #     path: /var/www/vhosts/{{ webmail_dns }}.{{ domain }}/
+    #     owner: nobody
+    #     group: nogroup
+    #     mode: 0555
+    #     recurse: yes
+
+    - name: Create Roundcube DB
+      mysql_db:
+        name: "{{ roundcube_db }}"
+        state: present
+
+    - name: Create Roundcube DB User
+      mysql_user: name={{ roundcube_db_user }} password={{ roundcube_db_psss }} priv=*.*:ALL state=present
+
+    - name: Grant Roundcube DB User Permissions
+      command:  mysql -u root --execute="GRANT ALL PRIVILEGES ON {{ roundcube_db }}.* TO '{{ roundcube_db_user }}'@'localhost' IDENTIFIED BY '{{ roundcube_db_psss }}';"
+
+    - name: Create Roundcube DB Structure
+      shell: mysql -u root {{ roundcube_db }} < /var/www/vhosts/{{ webmail_dns }}.{{ domain }}/SQL/mysql.initial.sql
+
+# Roundcube Conf
+
+    - name: Delete Roundcube Sample Config File
+      file:
+        path: /var/www/vhosts/{{ webmail_dns }}.{{ domain }}/config/config.inc.php
+        state: absent
+
+    - name: Configure Roundcube
+      template:
+        src: 'etc/roundcube/config.inc.php.j2'
+        dest: '/var/www/vhosts/{{ webmail_dns }}.{{ domain }}/config/config.inc.php'
+
+    - name: Create Roundcube Apache Virtual Host Config File
+      file:
+        path: /etc/apache2/sites-available/{{ webmail_dns }}.{{ domain }}.conf
+        state: touch
+
+    - name: Create Roundcube Apache Virtual Host Config
+      blockinfile:
+        path: /etc/apache2/sites-available/{{ webmail_dns }}.{{ domain }}.conf
+        insertafter: EOF
+        content: |
+          <IfModule mod_ssl.c>
+          <VirtualHost *:443>
+                  ServerAdmin {{ firstname }}@{{ domain }}
+                  ServerName {{ webmail_dns }}.{{ domain }}
+                  DocumentRoot /var/www/vhosts/{{ webmail_dns }}.{{ domain }}
+                  SSLEngine on
+                  ErrorLog /var/log/apache2/{{ webmail_dns }}.{{ domain }}-error.log
+                  CustomLog /var/log/apache2/{{ webmail_dns }}.{{ domain }}-access.log combined
+                  SSLCertificateFile /etc/letsencrypt/live/{{ webmail_dns }}.{{ domain }}/cert.pem
+                  SSLCertificateKeyFile /etc/letsencrypt/live/{{ webmail_dns }}.{{ domain }}/privkey.pem
+                  SSLCertificateChainFile /etc/letsencrypt/live/{{ webmail_dns }}.{{ domain }}/fullchain.pem
+          </VirtualHost>
+          </IfModule>
+
+    - name: Enable Roundcube Apache Virtual Host
+      shell: a2ensite {{ webmail_dns }}.{{ domain }}
+
+# Roundcube Plugins
+
+    - name: Create Roundcube Plugin twofactor_gauthenticator folder
+      file:
+        path: /var/www/vhosts/{{ webmail_dns }}.{{ domain }}/plugins/twofactor_gauthenticator
+        state: directory
+
+    - git:
+       repo: 'https://github.com/alexandregz/twofactor_gauthenticator.git'
+       dest: /var/www/vhosts/{{ webmail_dns }}.{{ domain }}/plugins/twofactor_gauthenticator
+
+# Roundcube Customise
+
+    - name: Delete existing roundcube larry skin logo
+      file:
+        path: /var/www/vhosts/{{ webmail_dns }}.{{ domain }}/skins/larry/images/roundcube_logo.png
+        state: absent
+
+    - name: Delete existing roundcube larry skin watermark
+      file:
+        path: /var/www/vhosts/{{ webmail_dns }}.{{ domain }}/skins/larry/images/watermark.jpg
+        state: absent
+
+    - name: Delete existing roundcube classic skin logo
+      file:
+        path: /var/www/vhosts/{{ webmail_dns }}.{{ domain }}/skins/classic/images/roundcube_logo.png
+        state: absent
+
+    - name: Delete existing roundcube classic skin watermark
+      file:
+        path: /var/www/vhosts/{{ webmail_dns }}.{{ domain }}/skins/classic/images/watermark.gif
+        state: absent
+
+# Roundcube Set Permissions
+
+    - name: Set Roundcube directory perms
+      shell: find $/var/www/vhosts/{{ webmail_dns }}.{{ domain }} -type d -exec chmod 755 {} \;
+
+    - name: Set Roundcube file perms
+      shell: find $/var/www/vhosts/{{ webmail_dns }}.{{ domain }} -type f -exec chmod 644 {} \; 
+       
+    - name: Change Roundcube folder ownership
+      shell: chown -R nobody:www-data $/var/www/vhosts/{{ webmail_dns }}.{{ domain }}
+
+# Roundcube Clean Up
+
+    - name: Roundcube clean up unneeded files
+      file:
+        path: "{{ item }}"
+        state: absent
+      with_items:
+        - /var/www/vhosts/{{ webmail_dns }}.{{ domain }}/INSTALL
+        - /var/www/vhosts/{{ webmail_dns }}.{{ domain }}/LICENSE
+        - /var/www/vhosts/{{ webmail_dns }}.{{ domain }}/README.md
+        - /var/www/vhosts/{{ webmail_dns }}.{{ domain }}/UPGRADING
+
+    - name: Roundcube clean up unneeded folders
+      file:
+        state: absent
+        path: "{{ item }}"
+      with_items:
+        - /var/www/vhosts/{{ webmail_dns }}.{{ domain }}/installer
+        - /var/www/vhosts/{{ webmail_dns }}.{{ domain }}/SQL
+
+# Get Letsencrypt mail DNS && webmail DNS
+
+  - hosts: test
+
+    vars_files:
+    - global-vars/config.yml
+
+    roles:
+
+      - role: thefinn93.letsencrypt
+
+        letsencrypt_webroot_path: /var/www/html
+        letsencrypt_email: "{{ firstname }}@{{ domain }}"
+        letsencrypt_cert_domains:
+         - '{{ mail_dns }}.{{ domain }}'
+        letsencrypt_renewal_command_args: '--renew-hook "systemctl restart apache2"'
+
+      - role: thefinn93.letsencrypt
+
+        letsencrypt_webroot_path: /var/www/html
+        letsencrypt_email: "{{ firstname }}@{{ domain }}"
+        letsencrypt_cert_domains:
+         - '{{ webmail_dns }}.{{ domain }}'
+        letsencrypt_renewal_command_args: '--renew-hook "systemctl restart apache2"'
+
+# IPTables
+
+  - hosts: test
+
+    vars_files:
+      - global-vars/config.yml
+
+    roles:
+      - { role: geerlingguy.firewall }
+
+# Restart Services
+
+  - hosts: test
+
+    tasks:
+
+    - name: Restart Service Apache2
+      service:
+        name: apache2
+        state: restarted
+
+    - name: Restart Service SpamAssassin
+      service:
+        name: spamassassin
+        state: restarted
+
+    - name: Restart Service Postfix
+      service:
+        name: postfix
+        state: restarted
+
+    - name: Restart Service Dovecot
+      service:
+        name: dovecot
+        state: restarted
+
+    - name: Restart Service mySQL
+      service:
+        name: mysql
+        state: restarted
+
+    - name: Restart Service PostGrey
+      service:
+        name: postgrey
+        state: restarted
+
+# Clean Up
+
+    - name: Delete html folder
+      file:
+        path: /var/www/html
+        state: absent
