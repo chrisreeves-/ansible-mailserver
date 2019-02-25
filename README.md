@@ -4,7 +4,7 @@
 
 The full description of the script can be found at https://chrisreeves.co.nz
 
-<h2> Scope </h2>
+<h2> Scope: </h2>
 
 This script installs and configures the following packages and services:
 
@@ -18,6 +18,12 @@ This script installs and configures the following packages and services:
 * Postgrey
 * iptables
 * Roundcube Webmail
+
+<h2> Requirements </h2>
+
+1. Ansible control server
+2. SSH keys established between Ansible control server and destination server(s)
+3. 2x Public DNS A records pointing to the server to be set up
 
 <h2> Dependancies: </h2>
 
