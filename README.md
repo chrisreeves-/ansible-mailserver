@@ -9,24 +9,15 @@ The full description of the script can be found at https://chrisreeves.co.nz
 This script installs and configures the following packages and services:
 
 * Apache
-
-PHP 7.2
-
-MySQL
-
-Postfix
-
-Dovecot
-
-Sieve
-
-SpamAssassin
-
-Postgrey
-
-iptables
-
-Roundcube Webmail
+* PHP 7.2
+* MySQL
+* Postfix
+* Dovecot
+* Sieve
+* SpamAssassin
+* Postgrey
+* iptables
+* Roundcube Webmail
 
 <h2> Dependancies: </h2>
 
