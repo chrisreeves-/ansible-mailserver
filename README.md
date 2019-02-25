@@ -1,6 +1,6 @@
 # ansible-mailserver
 
-<h2> Full Decription: </h2>
+<h2> Full Description: </h2>
 
 The full description of the script can be found at https://chrisreeves.co.nz
 
@@ -19,7 +19,7 @@ This script installs and configures the following packages and services:
 * iptables
 * Roundcube Webmail
 
-<h2> Requirements </h2>
+<h2> Requirements: </h2>
 
 1. Ansible control server
 2. SSH keys established between Ansible control server and destination server(s)
