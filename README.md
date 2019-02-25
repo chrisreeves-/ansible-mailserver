@@ -19,8 +19,8 @@ This script installs and configures the following packages and services:
 * Postgrey
 * iptables
 * Roundcube Webmail
-  ** managesieve plugin
-  ** two_factor_auth plugin
+  - managesieve plugin
+  - two_factor_auth plugin
 
 <h2> Requirements: </h2>
 
