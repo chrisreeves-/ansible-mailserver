@@ -13,11 +13,14 @@ This script installs and configures the following packages and services:
 * MySQL
 * Postfix
 * Dovecot
+* Letsencrypt
 * Sieve
 * SpamAssassin
 * Postgrey
 * iptables
 * Roundcube Webmail
+  ** managesieve plugin
+  ** two_factor_auth plugin
 
 <h2> Requirements: </h2>
 
