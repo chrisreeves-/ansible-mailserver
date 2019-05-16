@@ -841,13 +841,13 @@
 # Roundcube Set Permissions
 
     - name: Set Roundcube directory perms
-      shell: find $/var/www/vhosts/{{ webmail_dns }}.{{ domain }} -type d -exec chmod 755 {} \;
+      shell: find /var/www/vhosts/{{ webmail_dns }}.{{ domain }} -type d -exec chmod 755 {} \;
 
     - name: Set Roundcube file perms
-      shell: find $/var/www/vhosts/{{ webmail_dns }}.{{ domain }} -type f -exec chmod 644 {} \; 
-       
+      shell: find /var/www/vhosts/{{ webmail_dns }}.{{ domain }} -type f -exec chmod 644 {} \;
+
     - name: Change Roundcube folder ownership
-      shell: chown -R nobody:www-data $/var/www/vhosts/{{ webmail_dns }}.{{ domain }}
+      shell: chown -R nobody:www-data /var/www/vhosts/{{ webmail_dns }}.{{ domain }}
 
 # Roundcube Clean Up
 
