@@ -7,6 +7,7 @@ servermailuser: pfauthuser
 servermaildbpass: 4f5dcb3dFDF
 mysql_user: root # MySQL Role
 mysql_root_password: S5CBiFeq44X9kAb8 # MySQL Role
+region: Australia/Brisbane # Region set for PHP
 domain: example.com # Postfix Role
 mail_dns: mail
 webmail_dns: webmail

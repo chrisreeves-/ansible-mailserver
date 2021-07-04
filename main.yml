@@ -94,18 +94,24 @@
           - php-ldap #Roundcube
           - php-mbstring #Roundcube
           - php-imagick #Roundcube
-          - php7.2-intl #Roundcube
+          - php7.4-intl #Roundcube
           - php-xml #Roundcube
           - dovecot-sieve #Sieve
           - dovecot-managesieved #Sieve
           - python-openssl #Letsencrypt
           - php-imap #PostfixAdmin
           - php-mbstring #PostfixAdmin
-          - php7.2-imap #PostfixAdmin
-          - php7.2-mbstring #PostfixAdmin
+          - php7.4-imap #PostfixAdmin
+          - php7.4-mbstring #PostfixAdmin
           - unzip #System
           - wget #System
         state: present
+
+    - name: Install Python3 Pip
+      command: apt install python3-pip
+
+    - name: Install Python mySQL
+      command: pip3 install pymysql
 
 # MySQL 
 
@@ -148,7 +154,7 @@
 
     - name: Start MySQL
       service: name=mysql state=started
-
+  GRANT ALL ON *.* TO 'user'@'localhost';
     - name: Ensure anonymous users are not in the database
       mysql_user: name='' host={{ item }} state=absent
       with_items:
@@ -158,31 +164,35 @@
     - name: Remove test database
       mysql_db: name=test state=absent
 
-    - name: Create a new database
-      mysql_db:
-        name: "{{ mail_db_dbname }}"
-        state: present
 
-    - name: Create DB user and pass and assign rights
-      command: mysql -u root --execute="GRANT SELECT ON {{ mail_db_dbname }}.* TO '"{{ servermailuser }}"'@'127.0.0.1' IDENTIFIED BY '"{{ servermaildbpass }}"';"
-
-    - name: Create virtual domains table
-      command: mysql -u root --execute="CREATE TABLE `"{{ mail_db_dbname }}"`.`virtual_domains` ( `id`  INT NOT NULL AUTO_INCREMENT, `name` VARCHAR(50) NOT NULL, PRIMARY KEY (`id`) ) ENGINE=InnoDB DEFAULT CHARSET=utf8;"
-
-    - name: Create virtual users table
-      command: mysql -u root --execute="CREATE TABLE `"{{ mail_db_dbname }}"`.`virtual_users` ( `id` INT NOT NULL AUTO_INCREMENT, `domain_id` INT NOT NULL, `password` VARCHAR(106) NOT NULL, `email` VARCHAR(120) NOT NULL, PRIMARY KEY (`id`), UNIQUE KEY `email` (`email`), FOREIGN KEY (domain_id) REFERENCES virtual_domains(id) ON DELETE CASCADE ) ENGINE=InnoDB DEFAULT CHARSET=utf8;"
-
-    - name: Create virtual aliases table
-      command: mysql -u root --execute="CREATE TABLE `"{{ mail_db_dbname }}"`.`virtual_aliases` ( `id` INT NOT NULL AUTO_INCREMENT, `domain_id` INT NOT NULL, `source` varchar(100) NOT NULL, `destination` varchar(100) NOT NULL, PRIMARY KEY (`id`), FOREIGN KEY (domain_id) REFERENCES virtual_domains(id) ON DELETE CASCADE ) ENGINE=InnoDB DEFAULT CHARSET=utf8;"
-
-    - name: Add Domain to Virtual Domains Table
-      command: mysql -u root --execute="INSERT INTO `"{{ mail_db_dbname }}"`.`virtual_domains` (`id` ,`name`) VALUES ('1', '"{{ domain }}"');"
-
-    - name: Add Email to Virtual Users Table
-      command: mysql -u root --execute="INSERT INTO `"{{ mail_db_dbname }}"`.`virtual_users` (`id`, `domain_id`, `password` , `email`) VALUES ('1', '1', ENCRYPT('"{{ emailpass }}"', CONCAT('$6$', SUBSTRING(SHA(RAND()), -16))), '"{{ firstname }}'@'{{ domain }}"');"
-
-    - name: Add Aliases to Virtual Aliases Table
-      command: mysql -u root --execute="INSERT INTO `"{{ mail_db_dbname }}"`.`virtual_aliases` (`id`, `domain_id`, `source`, `destination`) VALUES ('1', '1', '"{{ aliases }}'@'{{ domain }}"', '"{{ firstname }}'@'{{ domain }}"');"
+#    - name: Create a new database
+#      mysql_db:
+#        name: "{{ mail_db_dbname }}"
+#        state: present
+#
+#    - name: Create DB user and pass
+#      command: mysql -u root --execute="CREATE USER '"{{ servermailuser }}"'@'127.0.0.1' IDENTIFIED BY '"{{ servermaildbpass }}"';"
+#
+#    - name: Create DB user and pass and assign rights
+#      command: mysql -u root --execute="GRANT SELECT ON {{ mail_db_dbname }}.* TO '"{{ servermailuser }}"'@'127.0.0.1';"
+#
+#    - name: Create virtual domains table
+#      command: mysql -u root --execute="CREATE TABLE `"{{ mail_db_dbname }}"`.`virtual_domains` ( `id`  INT NOT NULL AUTO_INCREMENT, `name` VARCHAR(50) NOT NULL, PRIMARY KEY (`id`) ) ENGINE=InnoDB DEFAULT CHARSET=utf8;"
+#
+#    - name: Create virtual users table
+#      command: mysql -u root --execute="CREATE TABLE `"{{ mail_db_dbname }}"`.`virtual_users` ( `id` INT NOT NULL AUTO_INCREMENT, `domain_id` INT NOT NULL, `password` VARCHAR(106) NOT NULL, `email` VARCHAR(120) NOT NULL, PRIMARY KEY (`id`), UNIQUE KEY `email` (`email`), FOREIGN KEY (domain_id) REFERENCES virtual_domains(id) ON DELETE CASCADE ) ENGINE=InnoDB DEFAULT CHARSET=utf8;"
+#
+#    - name: Create virtual aliases table
+#      command: mysql -u root --execute="CREATE TABLE `"{{ mail_db_dbname }}"`.`virtual_aliases` ( `id` INT NOT NULL AUTO_INCREMENT, `domain_id` INT NOT NULL, `source` varchar(100) NOT NULL, `destination` varchar(100) NOT NULL, PRIMARY KEY (`id`), FOREIGN KEY (domain_id) REFERENCES virtual_domains(id) ON DELETE CASCADE ) ENGINE=InnoDB DEFAULT CHARSET=utf8;"
+#
+#    - name: Add Domain to Virtual Domains Table
+#      command: mysql -u root --execute="INSERT INTO `"{{ mail_db_dbname }}"`.`virtual_domains` (`id` ,`name`) VALUES ('1', '"{{ domain }}"');"
+#
+#    - name: Add Email to Virtual Users Table
+#      command: mysql -u root --execute="INSERT INTO `"{{ mail_db_dbname }}"`.`virtual_users` (`id`, `domain_id`, `password` , `email`) VALUES ('1', '1', ENCRYPT('"{{ emailpass }}"', CONCAT('$6$', SUBSTRING(SHA(RAND()), -16))), '"{{ firstname }}'@'{{ domain }}"');"
+#
+#    - name: Add Aliases to Virtual Aliases Table
+#      command: mysql -u root --execute="INSERT INTO `"{{ mail_db_dbname }}"`.`virtual_aliases` (`id`, `domain_id`, `source`, `destination`) VALUES ('1', '1', '"{{ aliases }}'@'{{ domain }}"', '"{{ firstname }}'@'{{ domain }}"');"
 
     - name: Delete existing dist folder
       file:
@@ -203,8 +213,8 @@
     - name: Enable Apache2 SSL
       shell: a2enmod ssl
 
-    - name: Disable Default Site
-      shell: a2dissite 000-default.conf
+#    - name: Disable Default Site
+#      shell: a2dissite 000-default.conf
 
     - name: Delete http default vhost
       file:
@@ -223,7 +233,7 @@
 
     - name: Enable Postfix Submission
       replace:
-       path: /etc/php/7.2/apache2/php.ini
+       path: /etc/php/7.4/apache2/php.ini
        regexp: ';date.timezone ='
        replace: 'date.timezone = {{ region }}'
        backup: yes
@@ -761,10 +771,10 @@
       mysql_user: name={{ roundcube_db_user }} password={{ roundcube_db_psss }} priv=*.*:ALL state=present
 
     - name: Grant Roundcube DB User Permissions
-      command:  mysql -u root --execute="GRANT ALL PRIVILEGES ON {{ roundcube_db }}.* TO '{{ roundcube_db_user }}'@'localhost' IDENTIFIED BY '{{ roundcube_db_psss }}';"
+      command:  mysql -u root --execute="GRANT ALL PRIVILEGES ON {{ roundcube_db }}.* TO '{{ roundcube_db_user }}'@'localhost';"
 
-    - name: Create Roundcube DB Structure
-      shell: mysql -u root {{ roundcube_db }} < /var/www/vhosts/{{ webmail_dns }}.{{ domain }}/SQL/mysql.initial.sql
+#    - name: Create Roundcube DB Structure
+#      shell: mysql -u root {{ roundcube_db }} < /var/www/vhosts/{{ webmail_dns }}.{{ domain }}/SQL/mysql.initial.sql
 
 # Roundcube Conf
 
@@ -841,13 +851,13 @@
 # Roundcube Set Permissions
 
     - name: Set Roundcube directory perms
-      shell: find $/var/www/vhosts/{{ webmail_dns }}.{{ domain }} -type d -exec chmod 755 {} \;
+      shell: find /var/www/vhosts/{{ webmail_dns }}.{{ domain }} -type d -exec chmod 755 {} \;
 
     - name: Set Roundcube file perms
-      shell: find $/var/www/vhosts/{{ webmail_dns }}.{{ domain }} -type f -exec chmod 644 {} \; 
-       
+      shell: find /var/www/vhosts/{{ webmail_dns }}.{{ domain }} -type f -exec chmod 644 {} \;
+
     - name: Change Roundcube folder ownership
-      shell: chown -R nobody:www-data $/var/www/vhosts/{{ webmail_dns }}.{{ domain }}
+      shell: chown -R nobody:www-data /var/www/vhosts/{{ webmail_dns }}.{{ domain }}
 
 # Roundcube Clean Up
 
