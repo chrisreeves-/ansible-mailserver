@@ -7,7 +7,7 @@
 
 # Set Hostname
 
-  - hosts: test
+  - hosts: localhost
 
 # Set Configuration Files
 
@@ -82,7 +82,7 @@
           - dovecot-imapd #Dovecot
           - dovecot-lmtpd #Dovecot
           - dovecot-mysql #Dovecot
-          - python-pymysql 
+#          - python-pymysql
           - mysql-client #MySQL
           - mysql-common #MySQL
           - spamc #SpamAssassin
