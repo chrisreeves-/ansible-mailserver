@@ -26,19 +26,11 @@
 
 # Download Role Dependancies
 
-    # - name: Download thefinn93.letsencrypt
-    #   local_action: ansible-galaxy install thefinn93.letsencrypt
+     - name: Download thefinn93.letsencrypt
+       local_action: ansible-galaxy install thefinn93.letsencrypt
 
-    # - name: Download geerlingguy.firewall
-    #   local_action: ansible-galaxy install geerlingguy.firewall
-
-# Aptitude Update && Upgrade
-
-    - name: Update and Upgrade Aptitude Packages
-      apt:
-        update_cache: yes
-        upgrade: yes
-        cache_valid_time: 86400 #One day
+     - name: Download geerlingguy.firewall
+       local_action: ansible-galaxy install geerlingguy.firewall
 
 # Set HostName
 
@@ -82,7 +74,6 @@
           - dovecot-imapd #Dovecot
           - dovecot-lmtpd #Dovecot
           - dovecot-mysql #Dovecot
-#          - python-pymysql
           - mysql-client #MySQL
           - mysql-common #MySQL
           - spamc #SpamAssassin
@@ -213,8 +204,8 @@
     - name: Enable Apache2 SSL
       shell: a2enmod ssl
 
-#    - name: Disable Default Site
-#      shell: a2dissite 000-default.conf
+    - name: Disable Default Site
+      shell: cd /etc/apache2/sites-enabled; a2dissite 000-default.conf
 
     - name: Delete http default vhost
       file:
@@ -916,7 +907,7 @@
 
 # Restart Services
 
-  - hosts: test
+  - hosts: localhost
 
     tasks:
 
@@ -949,6 +940,14 @@
       service:
         name: postgrey
         state: restarted
+
+# Aptitude Update && Upgrade
+
+    - name: Update and Upgrade Aptitude Packages
+      apt:
+        update_cache: yes
+        upgrade: yes
+        cache_valid_time: 86400 #One day
 
 # Clean Up
 
