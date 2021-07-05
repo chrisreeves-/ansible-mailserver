@@ -26,10 +26,10 @@
 
 # Download Role Dependancies
 
-     - name: Download thefinn93.letsencrypt
+    - name: Download thefinn93.letsencrypt
        local_action: ansible-galaxy install thefinn93.letsencrypt
 
-     - name: Download geerlingguy.firewall
+    - name: Download geerlingguy.firewall
        local_action: ansible-galaxy install geerlingguy.firewall
 
 # Set HostName
