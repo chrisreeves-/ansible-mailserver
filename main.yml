@@ -107,8 +107,8 @@
           - wget #System
         state: present
 
-    - name: Install Python3 Pip
-      command: apt install python3-pip
+    - name: Install Python3-pip
+      apt: name=python3-pip state=present
 
     - name: Install Python mySQL
       command: pip3 install pymysql
