@@ -871,7 +871,7 @@
 
 # Get Letsencrypt mail DNS && webmail DNS
 
-- hosts: test
+- hosts: localhost
 
   vars_files:
     - global-vars/config.yml
