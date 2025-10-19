@@ -1,0 +1,25 @@
+# GitGuardian configuration for ansible-mailserver repository
+# This repository contains Ansible configuration templates with placeholder passwords
+# that should not trigger security alerts.
+
+version: 2
+
+# Suppress specific placeholder passwords and false positives
+matches-ignore:
+  # Ignore the placeholder password "yourpasswordhere" in config.yml
+  - name: Generic Password
+    match: yourpasswordhere
+  
+  # Ignore "changeme" default password placeholder
+  - name: Generic Password
+    match: changeme
+  
+  # Ignore the SQL query false positive in dovecot-sql.conf.ext
+  # This is just a column name, not an actual password
+  - name: Generic Password
+    match: password FROM virtual_users
+
+# Ignore passwords in configuration template files
+paths-ignore:
+  - 'global-vars/config.yml'
+  - 'etc/dovecot/dovecot-sql.conf.ext'
