@@ -4,9 +4,9 @@ mail_hostname: mail # MySQL Role
 mail_db_host: localhost # MySQL Role
 mail_db_dbname: postfixauthdb # MySQL Role
 servermailuser: pfauthuser
-servermaildbpass: 4f5dcb3dFDF
+servermaildbpass: yourpasswordhere
 mysql_user: root # MySQL Role
-mysql_root_password: S5CBiFeq44X9kAb8 # MySQL Role
+mysql_root_password: yourpasswordhere # MySQL Role
 region: Australia/Brisbane # Region set for PHP
 domain: example.com # Postfix Role
 mail_dns: mail
@@ -18,7 +18,7 @@ roundcube_name: "Example Company Roundcube" # Roundcube Role
 roundcube_src: https://github.com/roundcube/roundcubemail/releases/download/1.4.11/roundcubemail-1.4.11-complete.tar.gz # Roundcube Role
 roundcube_db: examplercdb # Roundcube Role
 roundcube_db_user: examplercdbusr # Roundcube Role
-roundcube_db_psss: 72LpwhA4A6kCFu # Roundcube Role
+roundcube_db_psss: yourpasswordhere # Roundcube Role
 roundcube_des: RYpwZn92bB61v5NNd8YQ9j5t # Roundcube DES (NEEDS TO BE 24 CHAR)
 firewall_allowed_tcp_ports:
   - "22"
